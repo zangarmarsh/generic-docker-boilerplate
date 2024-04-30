@@ -5,10 +5,9 @@
 git clone https://github.com/zangarmarsh/generic-docker-boilerplate && \
 cd generic-docker-boilerplate && \
 # <optional> vi .env && \
-docker compose up
-echo "127.0.0.1 d.test # Docker Generic Boilerplate" | sudo tee -a /etc/hosts
+# <optional> echo "127.0.0.1 d.test # Docker Generic Boilerplate" | sudo tee -a /etc/hosts && \
+docker compose up --build
 ```
-
 
 ### Comes out of the box with:
 - PHP 8.3 FPM

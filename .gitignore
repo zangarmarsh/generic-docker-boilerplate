@@ -1,4 +1,5 @@
 .idea
-/docker/data/tidb-pd0
-/docker/data/tidb-tikv0
+/docker/data
 /docker/logs
+logs
+vendor

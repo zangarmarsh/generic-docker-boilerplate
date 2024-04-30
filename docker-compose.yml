@@ -1,0 +1,143 @@
+version: "3.8"
+
+services:
+  php:
+    build: ./docker/config/php/
+    volumes:
+      - ./www/:/var/www/html/
+    ports:
+      - "${PHP_PORT:-9000}:9000"
+
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - "${NGINX_HOST_PORT:-80}:80"
+    volumes:
+      - ./docker/config/nginx/vhost:/etc/nginx/conf.d
+      - ./www/:/var/www/html/
+    depends_on:
+      - php
+
+  #
+  # Databases section
+  #
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest-alpine
+
+  mariadb:
+    image: mariadb:latest
+    ports:
+      - "${MARIADB_PORT:-3306}:3306"
+    environment:
+     MYSQL_ROOT_PASSWORD: "${MARIA_ROOT_PASSWORD:-password}"
+     MYSQL_DATABASE:      "${MARIA_DATABASE_NAME:-database}"
+     MYSQL_USER:          "${MARIA_USER_NAME:-user}"
+     MYSQL_PASSWORD:      "${MARIA_USER_PASSWORD:-password}"
+
+  tidb:
+    image: pingcap/tidb:v6.1.3
+    ports:
+      - "${TIDB_REQUEST_PORT:-4000}:4000"
+      - "${TIDB_STATUS_REPORT_PORT:-10080}:10080"
+    volumes:
+      - ./docker/config/tidb/tidb.toml:/tidb.toml:ro
+      - ./docker/logs:/logs
+    command:
+      - --store=tikv
+      - --path=tidb-pd0:2379
+      - --log-file=/logs/tidb.log
+      - --advertise-address=tidb
+      - --enable-binlog=false
+    depends_on:
+      - "tidb-tikv0"
+    restart: unless-stopped
+
+  tidb-pd0:
+    image: pingcap/pd:v6.1.3
+    ports:
+      - "2379"
+    volumes:
+      - ./docker/config/tidb/pd.toml:/pd.toml:ro
+      - ./docker/data:/data
+      - ./docker/logs:/logs
+    command:
+      - --name=pd0
+      - --client-urls=http://0.0.0.0:2379
+      - --peer-urls=http://0.0.0.0:2380
+      - --advertise-client-urls=http://tidb-pd0:2379
+      - --advertise-peer-urls=http://tidb-pd0:2380
+      - --initial-cluster=pd0=http://tidb-pd0:2380
+      - --data-dir=/data/tidb-pd0
+      - --log-file=/logs/tidb-pd0.log
+
+  tidb-tikv0:
+    image: pingcap/tikv:v6.1.3
+    volumes:
+      - ./docker/config/tidb/tikv.toml:/tikv.toml:ro
+      - ./docker/data:/data
+      - ./docker/logs:/logs
+    command:
+      - --addr=0.0.0.0:20160
+      - --advertise-addr=tidb-tikv0:20160
+      - --data-dir=/data/tidb-tikv0
+      - --pd=tidb-pd0:2379
+      - --log-file=/logs/tidb-tikv0.log
+    depends_on:
+      - "tidb-pd0"
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin
+    ports:
+      - "${PMA_PORT:-8080}:80"
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MARIA_ROOT_PASSWORD}"
+      MYSQL_USER: "${MARIA_USER_NAME}"
+      MYSQL_PASSWORD: "${MARIA_USER_PASSWORD}"
+    depends_on:
+      - clickhouse
+      - mariadb
+      - tidb
+
+  mongo:
+    image: mongo
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: "${MONGO_ROOT_USERNAME:-root}"
+      MONGO_INITDB_ROOT_PASSWORD: "${MONGO_ROOT_PASSWORD:-password}"
+
+  mongo-express:
+    image: mongo-express:latest
+    restart: always
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: "${MONGO_ROOT_USERNAME:-root}"
+      ME_CONFIG_MONGODB_ADMINPASSWORD: "${MONGO_ROOT_PASSWORD:-password}"
+      ME_CONFIG_MONGODB_PORT: "${MONGO_PORT:-27017}"
+      ME_CONFIG_MONGODB_URL: "mongodb://mongo:${MONGO_PORT:-27017}/"
+      ME_CONFIG_BASICAUTH: false
+    ports:
+      - "${MONGO_EXPRESS_PORT:-8081}:${MONGO_EXPRESS_PORT:-8081}"
+    depends_on:
+      - "mongo"
+
+  # Caching section
+  redis:
+    image: redis:latest
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+
+  redis-stat:
+    image: redislabs/redisinsight:latest
+    ports:
+      - "${REDIS_DASHBOARD_HOST_PORT:-8081}:8001"
+
+  gearmand:
+    image: artefactual/gearmand
+
+  # Fake email handler
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "${MAILHOG_FAKESMTP_HOST_PORT-1025}:1025"
+      - "${MAILHOG_WEB_HOST_PORT-8025}:8025"

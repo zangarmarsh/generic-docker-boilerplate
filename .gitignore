@@ -1,0 +1,3 @@
+/docker/data/tidb-pd0
+/docker/data/tidb-tikv0
+/docker/logs
